@@ -154,13 +154,13 @@ document.addEventListener("click",e=>{
   const tr=e.target.closest("tr[data-g]");if(tr){ui.sel[tr.dataset.id]=+tr.dataset.g;render();return}
   const b=e.target.closest("[data-a]");if(!b)return;
   const a=b.dataset.a,id=b.dataset.id,c=id&&GRT.get(id);
-  if(a==="imp"){GRT.pick().then(r=>{ui.msg=GRT.resume(r);render();toParent({type:"atelier:grt-maj"})});return}
+  if(a==="imp"){GRT.pick().then(r=>{ui.msg=GRT.resume(r);render();toParent({type:"atelier:grt-maj",ids:r.ok.map(c=>c.id)})});return}
   if(!c)return;
   const g=chargeSel(c).g;
   if(a==="seance")toParent({type:"atelier:grt",cible:"recharge",grtId:id,g});
   if(a==="fiche")toParent({type:"atelier:grt",cible:"tir",action:"fiche",grtId:id,g});
   if(a==="clics")toParent({type:"atelier:grt",cible:"tir",action:"clics",grtId:id,g});
-  if(a==="suppr"){if(b.dataset.ok){GRT.remove(id);ui.msg="Calcul retiré. Sa fiche munition reste dans l'onglet Tir.";render()}
+  if(a==="suppr"){if(b.dataset.ok){GRT.remove(id);ui.msg="Calcul retiré de l'onglet GRT. Sa fiche munition reste dans Tir et dans Clics : pour l'enlever aussi, ouvre-la dans Tir (Munitions) et touche Supprimer.";render()}
     else{b.dataset.ok=1;b.textContent="Confirmer le retrait"}}
 });
 document.addEventListener("keydown",e=>{const tr=e.target.closest&&e.target.closest("tr[data-g]");if(tr&&(e.key==="Enter"||e.key===" ")){e.preventDefault();tr.click()}});

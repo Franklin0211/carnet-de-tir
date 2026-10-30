@@ -57,7 +57,7 @@ document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>show(b.dataset.
 window.addEventListener("message",e=>{const m=e.data||{};
   if(m.type==="atelier:go")show(m.tab);
   if(m.type==="atelier:clics"){show("clics");send("clics",m)}
-  if(m.type==="atelier:grt-maj"){["tir","recharge","clics"].forEach(t=>{if(frames[t])send(t,{type:"atelier:grt-maj"})})}
+  if(m.type==="atelier:grt-maj"){["tir","recharge","clics"].forEach(t=>{if(frames[t])send(t,m)})}
   if(m.type==="atelier:grt"){if(m.cible==="recharge"){show("recharge");send("recharge",m)}
     else if(m.action==="clics"){frame("tir");send("tir",m)}
     else{show("tir");send("tir",m)}}});

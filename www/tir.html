@@ -941,7 +941,7 @@ document.addEventListener("click",e=>{
       if(!isNaN(a2))draft.assise=a2.toFixed(2);break}
     case "saveRec":{pull();const r={...draft};delete r._exist;
       db.recettes=draft._exist?db.recettes.map(x=>x.id===r.id?r:x):[...db.recettes,r];save();ui.route=null;draft=null;break}
-    case "delRec":if(confirm("Supprimer cette recette ?")){db.recettes=db.recettes.filter(x=>x.id!==draft.id);save();ui.route=null;draft=null}break;
+    case "delRec":if(confirm("Supprimer cette recette ?")){if(draft.grtId)db.grtIgnores=[...new Set([...(db.grtIgnores||[]),draft.grtId])];db.recettes=db.recettes.filter(x=>x.id!==draft.id);save();ui.route=null;draft=null}break;
 
     case "newArme":draft={id:uid(),nom:"",modele:"",type:"Verrou (bolt action)",calibre:"",canon:"",pas:"",
       lunette:"",clic:"0.1 MIL",coupsInit:"",notes:""};ui.route={t:"arme"};break;
@@ -1044,7 +1044,7 @@ function grtRecette(c){const fx=(x,n)=>x==null?"":String(+x.toFixed(n));const re
    longEtui:fx(c.longEtui,2),colMax:"",volume:fx(c.volume,1),recuits:"",tension:"",amorce:"",marqueMun:"",refMun:"",v0Annoncee:ref.v?String(ref.v):"",
    lot:"",prix:"",parBoite:"",col:fx(c.col,2),cbto:"",saut:"",assise:"",sertissage:"",
    notes:`Importé de GRT (${c.src}).${c.canon?` Canon ${c.canon} mm`:""}${c.pas?`, pas 1:${c.pas}"`:""}. La V0 annoncée est la prévision GRT pour la charge de référence.`}}
-function syncGrt(){let n=0;GRT.list().forEach(c=>{if(!db.recettes.some(r=>r.grtId===c.id)){db.recettes.push(grtRecette(c));n++}});if(n)save();return n}
+function syncGrt(){let n=0;const ign=db.grtIgnores||[];GRT.list().forEach(c=>{if(!ign.includes(c.id)&&!db.recettes.some(r=>r.grtId===c.id)){db.recettes.push(grtRecette(c));n++}});if(n)save();return n}
 function grtBloc(r){const c=r.grtId&&GRT.get(r.grtId);if(!c)return"";
   const tirs=db.tirs.filter(t=>t.recetteId===r.id),refG=enGr(r.chargeRef,r.chargeRefU);
   const mes=x=>{const v=tirs.filter(t=>{const g=enGr(t.charge,t.chargeU);return g!=null&&Math.abs(g-x.gr)<0.06}).flatMap(t=>t.vitesses||[]).filter(n=>typeof n==="number");
@@ -1059,6 +1059,7 @@ function grtBloc(r){const c=r.grtId&&GRT.get(r.grtId);if(!c)return"";
   </table></div>
   <div style="margin-top:6px;font-size:11.5px;color:var(--mute)">Touche une ligne pour en faire la charge de référence. « Mesurée » = moyenne de tes vitesses au chrono à cette charge (nombre de coups).${c.pmax?` P max CIP : ${f(c.pmax,0)} bar.`:""}</div>`}
 window.addEventListener("message",e=>{const m=e.data||{};
+  if(m.type==="atelier:grt-maj"&&m.ids&&db.grtIgnores){db.grtIgnores=db.grtIgnores.filter(id=>!m.ids.includes(id));save()}
   if(m.type==="atelier:show"||m.type==="atelier:grt-maj"){if(syncGrt()&&!ui.route)render();else if(!ui.route)render()}
   if(m.type==="atelier:grt"){syncGrt();const r=db.recettes.find(x=>x.grtId===m.grtId);if(!r)return;
     if(m.action==="clics"){try{window.parent.postMessage({type:"atelier:clics",recetteId:r.id},"*")}catch(_){};return}
