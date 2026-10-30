@@ -115,6 +115,63 @@ textarea{width:100%;background:var(--surf2);border:1px solid var(--line);border-
 <div id="app"></div>
 <script>
 try{if(!window.Capacitor&&window.parent!==window&&window.parent.Capacitor)window.Capacitor=window.parent.Capacitor}catch(e){}
+/* ===== GRT (Gordon's Reloading Tool) — bibliothèque commune de l'Atelier ===== */
+const GRT=(()=>{
+ const K="atelier-grt-v1";
+ const dec=s=>{try{return decodeURIComponent(String(s??""))}catch(e){return String(s??"")}};
+ const num=s=>{const m=String(s??"").replace(",",".").match(/-?\d+(\.\d+)?/);return m?parseFloat(m[0]):null};
+ const unit=s=>String(s??"").trim().split(/\s+/).slice(1).join(" ");
+ const toG=s=>{const v=num(s);if(v==null)return null;return /gr/i.test(unit(s))?v/15.4324:v};
+ const toMm=s=>{const v=num(s);if(v==null)return null;return /^in/.test(unit(s))?v*25.4:v};
+ const toBar=s=>{const v=num(s);if(v==null)return null;const u=unit(s);return /psi/i.test(u)?v*0.0689476:/mpa/i.test(u)?v*10:v};
+ const toMs=s=>{const v=num(s);if(v==null)return null;return /ft/i.test(unit(s))?v*0.3048:v};
+ const rd=(x,n)=>x==null||isNaN(x)?null:Math.round(x*10**n)/10**n;
+ const MARQUES={sellierbellot:"Sellier & Bellot",reloadswiss:"Reload Swiss",vihtavuori:"Vihtavuori",hodgdon:"Hodgdon",alliant:"Alliant",
+  norma:"Norma",lapua:"Lapua",sierra:"Sierra",hornady:"Hornady",nosler:"Nosler",berger:"Berger",vectan:"Vectan",accurate:"Accurate",imr:"IMR",winchester:"Winchester",ramshot:"Ramshot"};
+ const marque=s=>{const d=dec(s).trim();return MARQUES[d.toLowerCase().replace(/[^a-z]/g,"")]||d};
+ const hash=s=>{let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))|0;return (h>>>0).toString(36)};
+ const norm=s=>String(s||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+ function parse(o,fname){
+  if(!o||!o.projectile||!o.propellant||!Array.isArray(o.ladder))throw new Error("Ce fichier n'est pas un export de calcul GRT.");
+  const cal=o.caliber||{},spec=o.caliberspec||{},gun=o.gun||{},pr=o.projectile,pw=o.propellant;
+  const calibre=dec(spec.cipname||cal.CaliberName).replace(/\s*\(.*$/,"").replace(/\.\s*$/,"").trim();
+  const dz=num(cal.Dz),calBal=dz?("."+String(Math.round(dz*1000)).padStart(3,"0")):"";
+  const projectile={marque:marque(pr.mname),modele:dec(pr.pname).trim(),gr:rd(num(pr.mp)*(/grain|^gr/i.test(unit(pr.mp))||!unit(pr.mp)?1:15.4324),1),
+   diam:rd(toMm(pr.Dbul),2),long:rd(toMm(pr.glen),2),g1:num(pr.g1bc),g7:num(pr.g7bc)};
+  projectile.label=[projectile.marque,projectile.modele,calBal,projectile.gr+" gr"].filter(Boolean).join(" ");
+  const poudre={marque:marque(pw.mname),modele:dec(pw.pname).trim(),lot:dec(pw.lotid).trim()};
+  poudre.label=poudre.marque+" "+poudre.modele;
+  const ladder=o.ladder.map(s=>{const g=toG(s.charge),r=s.results||{},m=s.messages||{};
+   const w=Array.isArray(m.warnings)?m.warnings.map(x=>dec(x).replace(/\s+/g," ").trim()).join(" "):"";
+   return {g:rd(g,3),gr:rd(g*15.4324,1),v:rd(toMs(r.MuzzleVelocity),0),p:rd(toBar(r.PeakPressure),0),e:num(r.MuzzleEnergy),remp:num(r.LoadRatio),warn:w}})
+   .filter(x=>x.g).sort((a,b)=>a.g-b.g);
+  const src=(dec(fname||o.File||"").split(/[\\/]/).pop()||"export GRT").replace(/\.(json|xml)$/i,"");
+  const gunNom=dec(gun.GunName).trim();
+  const c={calibre,projectile,poudre,ladder,chargeRef:rd(toG(pw.mc),3),col:rd(toMm(cal.oal),2),longEtui:rd(toMm(cal.caselen),2),
+   volume:rd(num(cal.casevol)*(/g\s*h2o/i.test(unit(cal.casevol))?15.4324:1),1),pmax:rd(num(spec.Pmax)&&/bar/i.test(unit(spec.Pmax))?num(spec.Pmax):toBar(cal.pMaxZul),0),
+   canon:rd(toMm(gun.xe),0),pas:num(gun.twistlen),arme:/^sans nom$/i.test(gunNom)?"":gunNom,src,importe:new Date().toISOString().slice(0,10)};
+  c.nom=`${calibre} · ${projectile.marque} ${projectile.modele} ${projectile.gr} gr · ${poudre.marque} ${poudre.modele}`;
+  c.id="grt-"+hash(JSON.stringify([calibre,projectile.label,poudre.label,poudre.lot,c.chargeRef,ladder.map(x=>x.g)]));
+  return c;
+ }
+ const list=()=>{try{const a=JSON.parse(localStorage.getItem(K)||"[]");return Array.isArray(a)?a:[]}catch(e){return []}};
+ const store=a=>{try{localStorage.setItem(K,JSON.stringify(a))}catch(e){}};
+ function add(cs){const a=list();let n=0;cs.forEach(c=>{const i=a.findIndex(x=>x.id===c.id);if(i<0){a.push(c);n++}else a[i]={...c,importe:a[i].importe}});store(a);return n}
+ function pick(){return new Promise(res=>{const i=document.createElement("input");i.type="file";i.accept=".json,application/json";i.multiple=true;
+  i.onchange=async()=>{const ok=[],err=[];for(const f of [...(i.files||[])]){try{ok.push(parse(JSON.parse(await f.text()),f.name))}catch(e){err.push(f.name)}}
+   const nouveaux=add(ok);res({ok,err,nouveaux})};i.click()})}
+ const remove=id=>store(list().filter(c=>c.id!==id));
+ const get=id=>list().find(c=>c.id===id);
+ const at=(c,g)=>c&&c.ladder.find(x=>Math.abs(x.g-g)<0.0015);
+ const match=(label,arr)=>arr.find(x=>x!==label&&norm(x)===norm(label))||arr.find(x=>norm(x)===norm(label))||label;
+ const merge=(base,k)=>{const n=new Set(base.map(norm));return [...base,...labels(k).filter(x=>!n.has(norm(x)))]};
+ const defaut=c=>{const ref=at(c,c.chargeRef)||c.ladder[c.ladder.length-1];if(!ref||!ref.warn)return ref;return [...c.ladder].reverse().find(x=>!x.warn&&x.g<=ref.g)||c.ladder[0]};
+ const labels=k=>[...new Set(list().map(c=>c[k].label))];
+ const resume=r=>{let t=r.ok.length?`${r.ok.length} calcul${r.ok.length>1?"s":""} GRT lu${r.ok.length>1?"s":""}, dont ${r.nouveaux} nouveau${r.nouveaux>1?"x":""}.`:"Aucun calcul GRT importé.";
+  if(r.err.length)t+=`\nNon reconnu${r.err.length>1?"s":""} : ${r.err.join(", ")}. Dans GRT, utilise l'export JSON du calcul.`;return t};
+ return {list,add,pick,get,at,match,labels,merge,defaut,resume,parse,remove};
+})();
+
 /* =================== CATALOGUES =================== */
 const nettoie=(m)=>m.replace(/\s*\((poing|complément|semi)\)$/,"");
 const POUDRES={
@@ -447,9 +504,9 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 
 const flat=(o)=>Object.entries(o).flatMap(([m,l])=>l.map(x=>nettoie(m)+" "+x));
 const L={
-  poudres:()=>[...flat(POUDRES),...db.perso.poudres].sort(),
+  poudres:()=>GRT.merge([...flat(POUDRES),...db.perso.poudres],"poudre").sort(),
   amorces:()=>[...flat(AMORCES),...db.perso.amorces].sort(),
-  projectiles:()=>[...PROJECTILES.map(p=>`${p[0]} ${p[1]} ${p[2]} ${p[3]} gr`),...db.perso.projectiles].sort(),
+  projectiles:()=>GRT.merge([...PROJECTILES.map(p=>`${p[0]} ${p[1]} ${p[2]} ${p[3]} gr`),...db.perso.projectiles],"projectile").sort(),
   etuis:()=>[...ETUIS,...db.perso.etuis].sort(),
   calibres:()=>[...CALIBRES,...db.perso.calibres].sort(),
   modeles:()=>[...flat(ARMES_CATALOGUE),...db.perso.modeles].sort(),
@@ -719,6 +776,7 @@ function ficheRecette(){
 
   ${rule("Notes")}
   <textarea data-f="notes" rows="4" placeholder="${usine?"Comportement, lot, magasin, prix relevé…":"Préparation des étuis, recuit, tri, outillage…"}">${esc(r.notes)}</textarea>
+  ${grtBloc(r)}
   <div class="foot"><button class="btn p full" data-a="saveRec">Enregistrer</button>
     ${r._exist?'<button class="btn d" data-a="delRec">Supprimer</button>':""}</div>
   ${r._exist&&window.parent!==window?`<button class="btn full" style="margin-top:10px" data-a="versClics" data-v="${r.id}">Calculer les clics avec cette munition →</button>`:""}`;
@@ -796,7 +854,7 @@ document.addEventListener("input",e=>{
   if(!draft)return;
   draft[k]=v;
   if(k==="recetteId"){const r=db.recettes.find(x=>x.id===v);
-    if(r){draft.poudre=draft.poudre||r.poudre||"";draft.col=draft.col||r.col||"";render()}return}
+    if(r){draft.poudre=draft.poudre||r.poudre||"";draft.col=draft.col||r.col||"";if(!draft.charge&&r.chargeRef){draft.charge=r.chargeRef;draft.chargeU=r.chargeRefU||"gr"}render()}return}
   if(k==="lunette"){const c=CLIC_MAP[v];if(c)draft.clic=c;render();return}
   if(k==="calibre"&&ui.route&&ui.route.t==="recette"){const c=COTES[v];
     if(c){if(c[0]&&!draft.longEtui)draft.longEtui=String(c[0]);if(!draft.colMax)draft.colMax=String(c[1])}
@@ -869,6 +927,7 @@ document.addEventListener("click",e=>{
       col:"",cbto:"",saut:"",assise:"",sertissage:"",notes:""};ui.route={t:"recette"};break;
     case "versClics":{pull();if(draft&&draft.id===v){const r={...draft};delete r._exist;db.recettes=db.recettes.map(x=>x.id===r.id?r:x);save()}
       try{window.parent.postMessage({type:"atelier:clics",recetteId:v},"*")}catch(e){}return}
+    case "grtRef":{pull();const c=GRT.get(draft.grtId),x=c&&GRT.at(c,+v);if(x){draft.chargeRef=String(x.g);draft.chargeRefU="g";draft.v0Annoncee=String(x.v)}break}
     case "openRec":draft={...db.recettes.find(x=>x.id===v),_exist:1};ui.route={t:"recette"};break;
     case "munType":pull();draft.type=v;break;
     case "etuiType":pull();draft.etuiNeuf=(v==="neuf");if(v==="neuf")draft.etuiTirs="";break;
@@ -976,6 +1035,35 @@ if("serviceWorker" in navigator){
   }
 }
 render();
+
+/* ===== Atelier : liaison GRT ===== */
+function grtRecette(c){const fx=(x,n)=>x==null?"":String(+x.toFixed(n));const ref=GRT.defaut(c)||{};
+  return {id:uid(),grtId:c.id,type:"recharge",nom:c.nom,calibre:GRT.match(c.calibre,L.calibres()),projectile:GRT.match(c.projectile.label,L.projectiles()),
+   poidsOgive:fx(c.projectile.gr,1),longOgive:fx(c.projectile.long,2),diam:fx(c.projectile.diam,2),bc:fx(c.projectile.g1,3),
+   poudre:GRT.match(c.poudre.label,L.poudres()),chargeRef:fx(ref.g,3),chargeRefU:"g",lotPoudre:c.poudre.lot||"",etui:"",etuiNeuf:true,etuiTirs:"",
+   longEtui:fx(c.longEtui,2),colMax:"",volume:fx(c.volume,1),recuits:"",tension:"",amorce:"",marqueMun:"",refMun:"",v0Annoncee:ref.v?String(ref.v):"",
+   lot:"",prix:"",parBoite:"",col:fx(c.col,2),cbto:"",saut:"",assise:"",sertissage:"",
+   notes:`Importé de GRT (${c.src}).${c.canon?` Canon ${c.canon} mm`:""}${c.pas?`, pas 1:${c.pas}"`:""}. La V0 annoncée est la prévision GRT pour la charge de référence.`}}
+function syncGrt(){let n=0;GRT.list().forEach(c=>{if(!db.recettes.some(r=>r.grtId===c.id)){db.recettes.push(grtRecette(c));n++}});if(n)save();return n}
+function grtBloc(r){const c=r.grtId&&GRT.get(r.grtId);if(!c)return"";
+  const tirs=db.tirs.filter(t=>t.recetteId===r.id),refG=enGr(r.chargeRef,r.chargeRefU);
+  const mes=x=>{const v=tirs.filter(t=>{const g=enGr(t.charge,t.chargeU);return g!=null&&Math.abs(g-x.gr)<0.06}).flatMap(t=>t.vitesses||[]).filter(n=>typeof n==="number");
+    return v.length?`${f(v.reduce((a,b)=>a+b,0)/v.length,0)} <span style="color:var(--mute)">(${v.length})</span>`:"—"};
+  return `${rule("Échelle GRT")}
+  <div style="overflow-x:auto;border:1px solid var(--line);border-radius:8px"><table style="border-collapse:collapse;width:100%;font-family:var(--mono);font-size:12px">
+   <tr style="color:var(--mute);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em"><td style="padding:6px">Charge</td><td style="padding:6px;text-align:right">Prévue</td><td style="padding:6px;text-align:right">Mesurée</td><td style="padding:6px;text-align:right">Pression</td></tr>
+   ${c.ladder.map(x=>{const on=refG!=null&&Math.abs(refG-x.gr)<0.06;
+    return `<tr data-a="grtRef" data-v="${x.g}" style="border-top:1px solid var(--line);cursor:pointer;${on?"background:rgba(201,151,47,.16)":""}">
+     <td style="padding:6px">${f(x.g,3)} g · ${f(x.gr,1)} gr${x.warn?' <b style="color:var(--red)">⚠</b>':""}</td><td style="padding:6px;text-align:right">${f(x.v,0)} m/s</td>
+     <td style="padding:6px;text-align:right">${mes(x)}</td><td style="padding:6px;text-align:right;color:${c.pmax&&x.p/c.pmax>=.92?"var(--red)":"inherit"}">${f(x.p,0)} bar</td></tr>`}).join("")}
+  </table></div>
+  <div style="margin-top:6px;font-size:11.5px;color:var(--mute)">Touche une ligne pour en faire la charge de référence. « Mesurée » = moyenne de tes vitesses au chrono à cette charge (nombre de coups).${c.pmax?` P max CIP : ${f(c.pmax,0)} bar.`:""}</div>`}
+window.addEventListener("message",e=>{const m=e.data||{};
+  if(m.type==="atelier:show"||m.type==="atelier:grt-maj"){if(syncGrt()&&!ui.route)render();else if(!ui.route)render()}
+  if(m.type==="atelier:grt"){syncGrt();const r=db.recettes.find(x=>x.grtId===m.grtId);if(!r)return;
+    if(m.action==="clics"){try{window.parent.postMessage({type:"atelier:clics",recetteId:r.id},"*")}catch(_){};return}
+    ui.tab="recettes";ui.menu=false;draft={...r,_exist:1};ui.route={t:"recette"};render();window.scrollTo(0,0)}});
+if(syncGrt())render();
 </script>
 </body>
 </html>

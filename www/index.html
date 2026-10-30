@@ -13,7 +13,7 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
 body{display:flex;flex-direction:column}
 #frames{flex:1;position:relative;min-height:0}
 iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:var(--bg)}
-nav{display:grid;grid-template-columns:repeat(3,1fr);background:var(--bar);border-top:1px solid var(--line);
+nav{display:grid;grid-template-columns:repeat(4,1fr);background:var(--bar);border-top:1px solid var(--line);
   padding-bottom:env(safe-area-inset-bottom,0px)}
 nav button{appearance:none;background:none;border:0;color:var(--mute);padding:9px 4px 10px;display:grid;justify-items:center;gap:3px;
   font:600 12.5px/1 system-ui,sans-serif;letter-spacing:.02em;cursor:pointer}
@@ -31,9 +31,11 @@ nav button:focus-visible{outline:2px solid var(--acc);outline-offset:-4px}
     <svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><circle cx="12" cy="11" r="4"/><circle cx="12" cy="11" r="1"/><path d="M8 18h8"/></svg>Tir</button>
   <button role="tab" data-tab="clics" aria-selected="false">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 2v6M12 16v6M2 12h6M16 12h6"/></svg>Clics</button>
+  <button role="tab" data-tab="grt" aria-selected="false">
+    <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16"/><path d="M7 15l4-5 3 3 5-7"/><path d="M15 6h4v4"/></svg>GRT</button>
 </nav>
 <script>
-const PAGES={recharge:"recharge.html",tir:"tir.html",clics:"clics.html"};
+const PAGES={recharge:"recharge.html",tir:"tir.html",clics:"clics.html",grt:"grt.html"};
 const frames={},pending={};
 let cur=null;
 function frame(t){
@@ -54,7 +56,11 @@ function show(t){
 document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>show(b.dataset.tab));
 window.addEventListener("message",e=>{const m=e.data||{};
   if(m.type==="atelier:go")show(m.tab);
-  if(m.type==="atelier:clics"){show("clics");send("clics",m)}});
+  if(m.type==="atelier:clics"){show("clics");send("clics",m)}
+  if(m.type==="atelier:grt-maj"){["tir","recharge","clics"].forEach(t=>{if(frames[t])send(t,{type:"atelier:grt-maj"})})}
+  if(m.type==="atelier:grt"){if(m.cible==="recharge"){show("recharge");send("recharge",m)}
+    else if(m.action==="clics"){frame("tir");send("tir",m)}
+    else{show("tir");send("tir",m)}}});
 let start="tir";try{start=localStorage.getItem("atelier-onglet")||"tir"}catch(e){}
 show(start);
 </script>

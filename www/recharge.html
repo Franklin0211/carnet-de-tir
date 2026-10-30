@@ -123,6 +123,63 @@ textarea{width:100%;background:var(--surf2);border:1px solid var(--line);border-
 <div id="app"></div>
 <script>
 try{if(!window.Capacitor&&window.parent!==window&&window.parent.Capacitor)window.Capacitor=window.parent.Capacitor}catch(e){}
+/* ===== GRT (Gordon's Reloading Tool) — bibliothèque commune de l'Atelier ===== */
+const GRT=(()=>{
+ const K="atelier-grt-v1";
+ const dec=s=>{try{return decodeURIComponent(String(s??""))}catch(e){return String(s??"")}};
+ const num=s=>{const m=String(s??"").replace(",",".").match(/-?\d+(\.\d+)?/);return m?parseFloat(m[0]):null};
+ const unit=s=>String(s??"").trim().split(/\s+/).slice(1).join(" ");
+ const toG=s=>{const v=num(s);if(v==null)return null;return /gr/i.test(unit(s))?v/15.4324:v};
+ const toMm=s=>{const v=num(s);if(v==null)return null;return /^in/.test(unit(s))?v*25.4:v};
+ const toBar=s=>{const v=num(s);if(v==null)return null;const u=unit(s);return /psi/i.test(u)?v*0.0689476:/mpa/i.test(u)?v*10:v};
+ const toMs=s=>{const v=num(s);if(v==null)return null;return /ft/i.test(unit(s))?v*0.3048:v};
+ const rd=(x,n)=>x==null||isNaN(x)?null:Math.round(x*10**n)/10**n;
+ const MARQUES={sellierbellot:"Sellier & Bellot",reloadswiss:"Reload Swiss",vihtavuori:"Vihtavuori",hodgdon:"Hodgdon",alliant:"Alliant",
+  norma:"Norma",lapua:"Lapua",sierra:"Sierra",hornady:"Hornady",nosler:"Nosler",berger:"Berger",vectan:"Vectan",accurate:"Accurate",imr:"IMR",winchester:"Winchester",ramshot:"Ramshot"};
+ const marque=s=>{const d=dec(s).trim();return MARQUES[d.toLowerCase().replace(/[^a-z]/g,"")]||d};
+ const hash=s=>{let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))|0;return (h>>>0).toString(36)};
+ const norm=s=>String(s||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+ function parse(o,fname){
+  if(!o||!o.projectile||!o.propellant||!Array.isArray(o.ladder))throw new Error("Ce fichier n'est pas un export de calcul GRT.");
+  const cal=o.caliber||{},spec=o.caliberspec||{},gun=o.gun||{},pr=o.projectile,pw=o.propellant;
+  const calibre=dec(spec.cipname||cal.CaliberName).replace(/\s*\(.*$/,"").replace(/\.\s*$/,"").trim();
+  const dz=num(cal.Dz),calBal=dz?("."+String(Math.round(dz*1000)).padStart(3,"0")):"";
+  const projectile={marque:marque(pr.mname),modele:dec(pr.pname).trim(),gr:rd(num(pr.mp)*(/grain|^gr/i.test(unit(pr.mp))||!unit(pr.mp)?1:15.4324),1),
+   diam:rd(toMm(pr.Dbul),2),long:rd(toMm(pr.glen),2),g1:num(pr.g1bc),g7:num(pr.g7bc)};
+  projectile.label=[projectile.marque,projectile.modele,calBal,projectile.gr+" gr"].filter(Boolean).join(" ");
+  const poudre={marque:marque(pw.mname),modele:dec(pw.pname).trim(),lot:dec(pw.lotid).trim()};
+  poudre.label=poudre.marque+" "+poudre.modele;
+  const ladder=o.ladder.map(s=>{const g=toG(s.charge),r=s.results||{},m=s.messages||{};
+   const w=Array.isArray(m.warnings)?m.warnings.map(x=>dec(x).replace(/\s+/g," ").trim()).join(" "):"";
+   return {g:rd(g,3),gr:rd(g*15.4324,1),v:rd(toMs(r.MuzzleVelocity),0),p:rd(toBar(r.PeakPressure),0),e:num(r.MuzzleEnergy),remp:num(r.LoadRatio),warn:w}})
+   .filter(x=>x.g).sort((a,b)=>a.g-b.g);
+  const src=(dec(fname||o.File||"").split(/[\\/]/).pop()||"export GRT").replace(/\.(json|xml)$/i,"");
+  const gunNom=dec(gun.GunName).trim();
+  const c={calibre,projectile,poudre,ladder,chargeRef:rd(toG(pw.mc),3),col:rd(toMm(cal.oal),2),longEtui:rd(toMm(cal.caselen),2),
+   volume:rd(num(cal.casevol)*(/g\s*h2o/i.test(unit(cal.casevol))?15.4324:1),1),pmax:rd(num(spec.Pmax)&&/bar/i.test(unit(spec.Pmax))?num(spec.Pmax):toBar(cal.pMaxZul),0),
+   canon:rd(toMm(gun.xe),0),pas:num(gun.twistlen),arme:/^sans nom$/i.test(gunNom)?"":gunNom,src,importe:new Date().toISOString().slice(0,10)};
+  c.nom=`${calibre} · ${projectile.marque} ${projectile.modele} ${projectile.gr} gr · ${poudre.marque} ${poudre.modele}`;
+  c.id="grt-"+hash(JSON.stringify([calibre,projectile.label,poudre.label,poudre.lot,c.chargeRef,ladder.map(x=>x.g)]));
+  return c;
+ }
+ const list=()=>{try{const a=JSON.parse(localStorage.getItem(K)||"[]");return Array.isArray(a)?a:[]}catch(e){return []}};
+ const store=a=>{try{localStorage.setItem(K,JSON.stringify(a))}catch(e){}};
+ function add(cs){const a=list();let n=0;cs.forEach(c=>{const i=a.findIndex(x=>x.id===c.id);if(i<0){a.push(c);n++}else a[i]={...c,importe:a[i].importe}});store(a);return n}
+ function pick(){return new Promise(res=>{const i=document.createElement("input");i.type="file";i.accept=".json,application/json";i.multiple=true;
+  i.onchange=async()=>{const ok=[],err=[];for(const f of [...(i.files||[])]){try{ok.push(parse(JSON.parse(await f.text()),f.name))}catch(e){err.push(f.name)}}
+   const nouveaux=add(ok);res({ok,err,nouveaux})};i.click()})}
+ const remove=id=>store(list().filter(c=>c.id!==id));
+ const get=id=>list().find(c=>c.id===id);
+ const at=(c,g)=>c&&c.ladder.find(x=>Math.abs(x.g-g)<0.0015);
+ const match=(label,arr)=>arr.find(x=>x!==label&&norm(x)===norm(label))||arr.find(x=>norm(x)===norm(label))||label;
+ const merge=(base,k)=>{const n=new Set(base.map(norm));return [...base,...labels(k).filter(x=>!n.has(norm(x)))]};
+ const defaut=c=>{const ref=at(c,c.chargeRef)||c.ladder[c.ladder.length-1];if(!ref||!ref.warn)return ref;return [...c.ladder].reverse().find(x=>!x.warn&&x.g<=ref.g)||c.ladder[0]};
+ const labels=k=>[...new Set(list().map(c=>c[k].label))];
+ const resume=r=>{let t=r.ok.length?`${r.ok.length} calcul${r.ok.length>1?"s":""} GRT lu${r.ok.length>1?"s":""}, dont ${r.nouveaux} nouveau${r.nouveaux>1?"x":""}.`:"Aucun calcul GRT importé.";
+  if(r.err.length)t+=`\nNon reconnu${r.err.length>1?"s":""} : ${r.err.join(", ")}. Dans GRT, utilise l'export JSON du calcul.`;return t};
+ return {list,add,pick,get,at,match,labels,merge,defaut,resume,parse,remove};
+})();
+
 /* =================== CATALOGUES (partagés avec Carnet de tir) =================== */
 const POUDRES={
 Vihtavuori:["N310","N320","N330","N32C","N340","N350","3N37","3N38","N105","N110","N120","N130","N133","N135","N140","N150","N160","N165","N170","N540","N550","N555","N560","N565","N568","N570","20N29","24N41"],
@@ -219,9 +276,9 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 
 const flat=(o)=>Object.entries(o).flatMap(([m,l])=>l.map(x=>m+" "+x));
 const L={
-  poudres:()=>[...flat(POUDRES),...db.perso.poudres].sort(),
+  poudres:()=>GRT.merge([...flat(POUDRES),...db.perso.poudres],"poudre").sort(),
   amorces:()=>[...flat(AMORCES),...db.perso.amorces].sort(),
-  projectiles:()=>[...PROJECTILES.map(p=>`${p[0]} ${p[1]} ${p[2]} ${p[3]} gr`),...db.perso.projectiles].sort(),
+  projectiles:()=>GRT.merge([...PROJECTILES.map(p=>`${p[0]} ${p[1]} ${p[2]} ${p[3]} gr`),...db.perso.projectiles],"projectile").sort(),
   etuis:()=>[...ETUIS,...db.perso.etuis].sort(),
   calibres:()=>[...CALIBRES,...db.perso.calibres].sort()
 };
@@ -307,6 +364,7 @@ function ficheSession(){
   return `<div style="display:flex;justify-content:space-between;margin-bottom:14px">
     <button class="btn s" data-a="close">Retour</button><button class="btn s p" data-a="saveSession">Enregistrer</button></div>
 
+  ${grtSessionBloc(s)}
   ${rule("Identité")}
   ${lb("Nom de la munition",fld("nom",{v:s.nom,ph:"ex. 6,5 CM match 140 gr"}))}
   <div class="row mt">
@@ -698,6 +756,31 @@ render();
  
 document.addEventListener("click",e=>{const a=e.target.closest&&e.target.closest('a[href="'+LIEN_TIR+'"]');
   if(a&&window.parent!==window){e.preventDefault();e.stopPropagation();try{window.parent.postMessage({type:"atelier:go",tab:"tir"},"*")}catch(_){}}},true);
+
+/* ===== Atelier : liaison GRT ===== */
+function grtSessionBloc(s){const l=GRT.list();if(!l.length)return"";const c=s.grtId&&GRT.get(s.grtId);
+  const d=(s.etapes&&s.etapes.poudre)||{},g=enGr(d.charge,d.chargeU||uniteDef()),x=c&&g!=null&&c.ladder.find(y=>Math.abs(y.gr-g)<0.06);
+  return `${rule("Calcul GRT")}
+  ${lb("Partir d'un calcul GRT",sel("_grtCalc",s.grtId||"",l.map(c=>({v:c.id,l:c.nom})),"Aucun"))}
+  ${c?`<div class="mt">${lb("Charge de l'échelle",sel("_grtCharge",x?String(x.g):"",c.ladder.map(y=>({v:String(y.g),l:`${y.g.toFixed(3)} g · ${y.gr.toFixed(1)} gr — ${y.v} m/s · ${y.p} bar${y.warn?" ⚠":""}`})),"Choisir une charge"))}</div>
+  <div style="margin-top:6px;font-size:11.5px;color:var(--mute)">${x?`GRT prévoit ${x.v} m/s et ${x.p} bar${c.pmax?` (${Math.round(x.p/c.pmax*100)} % de la P max CIP)`:""} pour cette charge.${x.warn?` <b style="color:var(--red)">${esc(x.warn)}</b>`:""}`:"La charge saisie ne correspond à aucune ligne de l'échelle GRT."}</div>`:""}`}
+function grtAppliquer(c,g){if(!draft)return;draft.grtId=c.id;draft.etapes=draft.etapes||vierge();
+  const P=draft.etapes.poudre=draft.etapes.poudre||{fait:false,note:""},O=draft.etapes.ogive=draft.etapes.ogive||{fait:false,note:""};
+  if(!draft.nom)draft.nom=c.nom;draft.calibre=draft.calibre||GRT.match(c.calibre,L.calibres());
+  P.poudre=GRT.match(c.poudre.label,L.poudres());if(c.poudre.lot)P.lotPoudre=c.poudre.lot;
+  const x=GRT.at(c,g)||GRT.defaut(c);if(x){P.charge=x.g.toFixed(3);P.chargeU="g"}
+  O.projectile=GRT.match(c.projectile.label,L.projectiles());if(c.col&&!O.col)O.col=String(c.col)}
+document.addEventListener("change",e=>{const k=e.target.dataset&&e.target.dataset.f;if(k!=="_grtCalc"&&k!=="_grtCharge")return;
+  document.querySelectorAll("[data-f]").forEach(el=>{const f=el.dataset.f;if(f&&!f.startsWith("_")&&draft)setP(draft,f,el.value)});
+  if(k==="_grtCalc"){const c=GRT.get(e.target.value);if(c)grtAppliquer(c,GRT.defaut(c).g);else if(draft)draft.grtId=""}
+  else{const c=GRT.get(draft.grtId);if(c)grtAppliquer(c,+e.target.value)}
+  render()});
+window.addEventListener("message",e=>{const m=e.data||{};
+  if(m.type==="atelier:show"&&!ui.route)render();
+  if(m.type==="atelier:grt"){const c=GRT.get(m.grtId);if(!c)return;
+    draft={id:uid(),date:new Date().toISOString().slice(0,10),nom:"",calibre:"",lotEtuiId:"",
+      etapes:vierge(),resultats:{quantiteProduite:"",rebuts:"",causes:[],poidsMoyen:"",observations:""},notes:""};
+    draftKind="session";ui.tab="sessions";ui.menu=false;ui.route={t:"session"};grtAppliquer(c,m.g);render();window.scrollTo(0,0)}});
 </script>
 
 </body>
