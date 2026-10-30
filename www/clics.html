@@ -404,8 +404,9 @@ function update(fromField){
  else al.hidden=true;
 
  const side=drift>0?'à gauche':'à droite';
- $('hold').innerHTML=`<span><strong>Bague de grossissement sur 10</strong>, tourelles sur 0 (réticule 10× Half Mil Dot).</span>
-  <span>Hauteur : ${holdTxt(upM,'v')} Pose-le sur le centre de la cible.</span>
+ const besoin=Math.abs(upM)>=0.25||Math.abs(wM)>=0.25;
+ $('hold').innerHTML=(besoin?`<span><strong>Bague de grossissement sur 10</strong>, tourelles sur 0 : les repères du réticule 10× Half Mil Dot ne sont justes qu'à 10. Avec la méthode des clics (en haut), le grossissement est libre.</span>`:`<span><strong>Grossissement libre</strong> (16 conseillé pour bien voir), parallaxe sur ${d} m : tu vises au centre de la croix, aucun repère n'est utilisé.</span>`)+`
+  <span>Hauteur : ${Math.abs(upM)<0.25?'centre de la croix sur le centre de la cible.':holdTxt(upM,'v')+' Pose-le sur le centre de la cible.'}</span>
   <span>Vent : ${Math.abs(wM)<0.25?holdTxt(0,'h'):`vise ${side}, face au vent, avec le ${holdTxt(wM,'h').replace(/\.$/,'')} sur le trait horizontal.`}</span>`;
 
  let h='';const cur=Math.round(d/50)*50;
